@@ -1,5 +1,5 @@
- Flask==2.3.3 > requirements.txt
- Flask-CORS==4.0.0 >> requirements.txt
- requests==2.31.0 >> requirements.txt
- gunicorn==21.2.0 >> requirements.txt
- beautifulsoup4==4.12.2 >> requirements.txt
+Flask==2.3.3
+Flask-CORS==4.0.0
+requests==2.31.0
+gunicorn==21.2.0
+beautifulsoup4==4.12.2
