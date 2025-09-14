@@ -1,8 +1,3 @@
-"""
-API Server Bitcoin Market Cycle - Versão de Teste
-Dados simulados realistas para testar o frontend
-"""
-
 from flask import Flask, jsonify
 from flask_cors import CORS
 from datetime import datetime
