@@ -1,516 +1,380 @@
-#!/usr/bin/env python3
 """
-API Server com Scraping Real da CoinMarketCap
-Coleta dados dinâmicos da tabela de indicadores em tempo real
+API Server Bitcoin Market Cycle - Versão de Teste
+Dados simulados realistas para testar o frontend
 """
 
 from flask import Flask, jsonify
 from flask_cors import CORS
-import requests
-from bs4 import BeautifulSoup
+from datetime import datetime
 import threading
 import time
-import re
-import json
 
 app = Flask(__name__)
 CORS(app)
 
-# Cache global para armazenar dados
-indicators_cache = {}
-last_update = None
-
-def clean_number(text):
-    """Limpa e converte texto para número"""
-    if not text:
-        return 0
-    
-    # Remove símbolos e espaços
-    cleaned = re.sub(r'[^\d.,-]', '', str(text))
-    
-    # Trata números com vírgula como separador decimal
-    if ',' in cleaned and '.' in cleaned:
-        # Se tem ambos, vírgula é separador de milhares
-        cleaned = cleaned.replace(',', '')
-    elif ',' in cleaned:
-        # Se só tem vírgula, pode ser decimal (formato europeu)
-        if len(cleaned.split(',')[-1]) <= 2:
-            cleaned = cleaned.replace(',', '.')
-        else:
-            cleaned = cleaned.replace(',', '')
-    
-    try:
-        return float(cleaned)
-    except:
-        return 0
-
-def scrape_coinmarketcap_table():
-    """Faz scraping da tabela de indicadores da CoinMarketCap"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = requests.get(
-            'https://coinmarketcap.com/charts/crypto-market-cycle-indicators/',
-            headers=headers,
-            timeout=30
-        )
-        
-        if response.status_code != 200:
-            print(f"Erro ao acessar CoinMarketCap: {response.status_code}")
-            return {}
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Procurar pela tabela de indicadores
-        table_data = {}
-        
-        # Tentar encontrar a tabela
-        table = soup.find('table') or soup.find('div', {'class': re.compile(r'table', re.I)})
-        
-        if table:
-            rows = table.find_all('tr')
-            for row in rows[1:]:  # Pular cabeçalho
-                cells = row.find_all(['td', 'th'])
-                if len(cells) >= 4:
-                    try:
-                        indicator_name = cells[1].get_text(strip=True)
-                        current_value = cells[2].get_text(strip=True)
-                        reference_value = cells[4].get_text(strip=True) if len(cells) > 4 else ""
-                        
-                        # Mapear nomes para nosso formato
-                        name_mapping = {
-                            'Bitcoin Ahr999 Index': 'Bitcoin Ahr999 Index',
-                            'Pi Cycle Top Indicator': 'Pi Cycle Top Indicator',
-                            'Puell Multiple': 'Puell Multiple',
-                            'Bitcoin Rainbow Chart': 'Bitcoin Rainbow Chart',
-                            'Days of ETF Net Outflows': 'Days of ETF Net Outflows',
-                            'ETF-to-BTC Ratio': 'ETF-to-BTC Ratio',
-                            '2-Year MA Multiplier': '2-Year MA Multiplier',
-                            'MVRV Z-Score': 'MVRV Z-Score',
-                            'Bitcoin Bubble Index': 'Bitcoin Bubble Index'
-                        }
-                        
-                        if indicator_name in name_mapping:
-                            table_data[name_mapping[indicator_name]] = {
-                                'current': current_value,
-                                'reference': reference_value
-                            }
-                    except Exception as e:
-                        print(f"Erro ao processar linha da tabela: {e}")
-                        continue
-        
-        print(f"Dados coletados da tabela: {len(table_data)} indicadores")
-        return table_data
-        
-    except Exception as e:
-        print(f"Erro no scraping da CoinMarketCap: {e}")
-        return {}
-
-def get_fear_greed_index():
-    """Coleta Fear & Greed Index"""
-    try:
-        response = requests.get('https://api.alternative.me/fng/', timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return float(data['data'][0]['value'])
-    except:
-        pass
-    return 50  # Valor padrão
-
-def get_bitcoin_dominance():
-    """Coleta Bitcoin Dominance"""
-    try:
-        response = requests.get('https://api.coingecko.com/api/v3/global', timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return data['data']['market_cap_percentage']['btc']
-    except:
-        pass
-    return 57.0  # Valor padrão
-
-def update_indicators():
-    """Atualiza todos os indicadores"""
-    global indicators_cache, last_update
-    
-    print("Atualizando indicadores...")
-    
-    # Scraping da tabela da CoinMarketCap
-    cmc_data = scrape_coinmarketcap_table()
-    
-    # Dados externos
-    fear_greed = get_fear_greed_index()
-    btc_dominance = get_bitcoin_dominance()
-    
-    # Definir todos os 31 indicadores com lógica correta
-    indicators = {
-        'Bitcoin Ahr999 Index': {
-            'current': clean_number(cmc_data.get('Bitcoin Ahr999 Index', {}).get('current', '1.06')),
-            'reference': 4.0,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Índice AHR999 do Bitcoin. Valores acima de 4 indicam possível topo.'
-        },
-        'Pi Cycle Top Indicator': {
-            'current': clean_number(cmc_data.get('Pi Cycle Top Indicator', {}).get('current', '111537.06')),
-            'reference': 192179.0,
-            'unit': '$',
-            'logic': 'higher_is_worse',
-            'description': 'Indicador Pi Cycle Top. Quando 111DMA cruza 350DMA x2, indica topo.'
-        },
-        'Puell Multiple': {
-            'current': clean_number(cmc_data.get('Puell Multiple', {}).get('current', '1.25')),
-            'reference': 2.2,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Receita diária dos mineradores vs média de 365 dias.'
-        },
-        'Bitcoin Rainbow Chart': {
-            'current': 3,
-            'reference': 6.0,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Gráfico Rainbow do Bitcoin. Nível 6+ indica zona de venda.'
-        },
-        'Days of ETF Net Outflows': {
-            'current': clean_number(cmc_data.get('Days of ETF Net Outflows', {}).get('current', '0')),
-            'reference': 10,
-            'unit': ' dias',
-            'logic': 'higher_is_worse',
-            'description': 'Dias consecutivos de saídas líquidas dos ETFs de Bitcoin.'
-        },
-        'ETF-to-BTC Ratio': {
-            'current': clean_number(cmc_data.get('ETF-to-BTC Ratio', {}).get('current', '5.22')),
-            'reference': 3.5,
-            'unit': '%',
-            'logic': 'lower_is_worse',
-            'description': 'Ratio ETF para BTC. Valores ≤3.5% indicam fim de ciclo.'
-        },
-        '2-Year MA Multiplier': {
-            'current': clean_number(cmc_data.get('2-Year MA Multiplier', {}).get('current', '115231.91')),
-            'reference': clean_number(cmc_data.get('2-Year MA Multiplier', {}).get('reference', '367260')),
-            'unit': '$',
-            'logic': 'higher_is_worse',
-            'description': 'Preço do Bitcoin vs média móvel de 2 anos multiplicada.'
-        },
-        'MVRV Z-Score': {
-            'current': clean_number(cmc_data.get('MVRV Z-Score', {}).get('current', '2.30')),
-            'reference': 5.0,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Z-Score do MVRV. Valores acima de 5 indicam sobrevalorização.'
-        },
-        'Bitcoin Bubble Index': {
-            'current': clean_number(cmc_data.get('Bitcoin Bubble Index', {}).get('current', '13.48')),
-            'reference': 80,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Índice de bolha do Bitcoin baseado em múltiplas métricas.'
-        },
-        'USDT Flexible Savings': {
-            'current': 6.58,
-            'reference': 29.0,
-            'unit': '%',
-            'logic': 'higher_is_worse',
-            'description': 'Taxa de poupança flexível USDT. Altas taxas indicam stress no mercado.'
-        },
-        'RSI - 22 Day': {
-            'current': 48.90,
-            'reference': 80,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'RSI de 22 dias do Bitcoin. Valores acima de 80 indicam sobrecompra.'
-        },
-        'CMC Altcoin Season Index': {
-            'current': 58,
-            'reference': 75,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Índice de temporada de altcoins da CoinMarketCap.'
-        },
-        'Bitcoin Dominance': {
-            'current': btc_dominance,
-            'reference': 40.0,
-            'unit': '%',
-            'logic': 'lower_is_worse',
-            'description': 'Dominância do Bitcoin no mercado cripto. ≤40% indica fim de ciclo.'
-        },
-        'Bitcoin Long Term Holder Supply': {
-            'current': 15.47,
-            'reference': 13.5,
-            'unit': 'M',
-            'logic': 'lower_is_worse',
-            'description': 'Suprimento de Bitcoin em carteiras de longo prazo.'
-        },
-        'Bitcoin Short Term Holder Supply': {
-            'current': 22.31,
-            'reference': 30.0,
-            'unit': '%',
-            'logic': 'higher_is_worse',
-            'description': 'Percentual do suprimento em carteiras de curto prazo.'
-        },
-        'Bitcoin Reserve Risk': {
-            'current': 0.0024,
-            'reference': 0.005,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Risco de reserva do Bitcoin baseado em HODL waves.'
-        },
-        'Bitcoin Net Unrealized P&L': {
-            'current': 54.91,
-            'reference': 70.0,
-            'unit': '%',
-            'logic': 'higher_is_worse',
-            'description': 'P&L não realizado líquido (NUPL). Valores acima de 70% indicam euforia extrema.'
-        },
-        'Bitcoin RHODL Ratio': {
-            'current': 2754,
-            'reference': 10000,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Ratio RHODL do Bitcoin para análise de ciclos.'
-        },
-        'Bitcoin Macro Oscillator': {
-            'current': 0.84,
-            'reference': 1.4,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Oscilador macro do Bitcoin (BMO).'
-        },
-        'Bitcoin MVRV Ratio': {
-            'current': 2.10,
-            'reference': 3.0,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Ratio MVRV do Bitcoin. Valores acima de 3 indicam sobrevalorização.'
-        },
-        'Bitcoin 4-Year Moving Average': {
-            'current': 2.13,
-            'reference': 3.5,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Preço atual vs média móvel de 4 anos.'
-        },
-        'Crypto Bitcoin Bull Run Index': {
-            'current': 74,
-            'reference': 90,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Índice de bull run cripto (CBBI). Valores acima de 90 indicam fim de bull run.'
-        },
-        'Mayer Multiple': {
-            'current': 1.13,
-            'reference': 2.2,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Múltiplo Mayer. Preço atual vs média móvel de 200 dias.'
-        },
-        'Bitcoin AHR999x Top Escape': {
-            'current': 3.04,
-            'reference': 0.45,
-            'unit': '',
-            'logic': 'lower_is_worse',
-            'description': 'Indicador AHR999x Top Escape. Valores ≤0.45 indicam escape do topo.'
-        },
-        'MicroStrategy Avg Bitcoin Cost': {
-            'current': 73526.0,
-            'reference': 155655.0,
-            'unit': '$',
-            'logic': 'higher_is_worse',
-            'description': 'Custo médio do Bitcoin da MicroStrategy.'
-        },
-        'Bitcoin Trend Indicator': {
-            'current': 6.14,
-            'reference': 7.0,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Indicador de tendência do Bitcoin.'
-        },
-        '3-Month Annualized Ratio': {
-            'current': 9.95,
-            'reference': 30.0,
-            'unit': '%',
-            'logic': 'higher_is_worse',
-            'description': 'Ratio anualizado de 3 meses.'
-        },
-        'Bitcoin Terminal Price': {
-            'current': 112035.99,
-            'reference': 187702.0,
-            'unit': '$',
-            'logic': 'higher_is_worse',
-            'description': 'Preço terminal do Bitcoin.'
-        },
-        'Golden Ratio Multiplier': {
-            'current': 112035.99,
-            'reference': 135522.0,
-            'unit': '$',
-            'logic': 'higher_is_worse',
-            'description': 'Multiplicador da proporção áurea.'
-        },
-        'Smithson Bitcoin Price Forecast': {
-            'current': 112035.99,
-            'reference': 175000.0,
-            'unit': '$',
-            'logic': 'higher_is_worse',
-            'description': 'Previsão de preço do Bitcoin de Smithson.'
-        },
-        'Fear & Greed Index': {
-            'current': fear_greed,
-            'reference': 80,
-            'unit': '',
-            'logic': 'higher_is_worse',
-            'description': 'Índice de Medo e Ganância. Valores acima de 80 indicam ganância extrema.'
-        }
+# Dados simulados realistas baseados em valores típicos do mercado
+SIMULATED_DATA = {
+    "Bitcoin Ahr999 Index": {
+        "current": 0.98,
+        "reference": 4.0,
+        "description": "Índice que combina preço e média móvel de 200 dias. Valores acima de 4 indicam possível topo de mercado.",
+        "unit": ""
+    },
+    "Pi Cycle Top Indicator": {
+        "current": 111351.78,
+        "reference": 190771,
+        "description": "Cruzamento de médias móveis de 111 e 350 dias. Quando a 111DMA cruza a 350DMA x2, indica possível topo.",
+        "unit": "$"
+    },
+    "Puell Multiple": {
+        "current": 1.13,
+        "reference": 2.2,
+        "description": "Receita diária dos mineradores vs média de 365 dias. Valores acima de 2.2 sugerem fim de ciclo.",
+        "unit": ""
+    },
+    "Bitcoin Rainbow Chart": {
+        "current": 3,
+        "reference": 5,
+        "description": "Gráfico logarítmico com bandas de preço. Banda 5 (vermelha) indica possível topo de mercado.",
+        "unit": ""
+    },
+    "2-Year MA Multiplier": {
+        "current": 111312.05,
+        "reference": 364280,
+        "description": "Multiplicador da média móvel de 2 anos. Valores próximos a $364k indicam topo histórico.",
+        "unit": "$"
+    },
+    "MVRV Z-Score": {
+        "current": 2.12,
+        "reference": 5.0,
+        "description": "Z-Score do MVRV (Market Value to Realized Value). Valores acima de 5 indicam possível topo.",
+        "unit": ""
+    },
+    "Bitcoin Bubble Index": {
+        "current": 13.48,
+        "reference": 80,
+        "description": "Índice de bolha baseado em desvios de preço. Valores acima de 80 indicam bolha extrema.",
+        "unit": ""
+    },
+    "Bitcoin Dominance": {
+        "current": 57.8,
+        "reference": 40,
+        "description": "Dominância do Bitcoin no mercado cripto. Quando cai para 40%, indica possível fim de ciclo.",
+        "unit": "%"
+    },
+    "Bitcoin MVRV Ratio": {
+        "current": 2.10,
+        "reference": 3.0,
+        "description": "Market Value to Realized Value Ratio. Valores acima de 3 indicam sobrevalorização.",
+        "unit": ""
+    },
+    "Mayer Multiple": {
+        "current": 1.13,
+        "reference": 2.2,
+        "description": "Preço atual vs média móvel de 200 dias. Valores acima de 2.2 indicam sobrevalorização.",
+        "unit": ""
+    },
+    "Fear & Greed Index": {
+        "current": 55,
+        "reference": 80,
+        "description": "Índice de medo e ganância do mercado. Valores acima de 80 indicam ganância extrema.",
+        "unit": ""
+    },
+    "Bitcoin Net Unrealized P&L": {
+        "current": 54.91,
+        "reference": 70,
+        "description": "P&L não realizado líquido (NUPL). Valores acima de 70% indicam euforia extrema.",
+        "unit": "%"
+    },
+    "Bitcoin RHODL Ratio": {
+        "current": 2754,
+        "reference": 10000,
+        "description": "Ratio RHODL (Realized HODL). Valores acima de 10000 indicam possível topo.",
+        "unit": ""
+    },
+    "Bitcoin Macro Oscillator": {
+        "current": 0.84,
+        "reference": 1.4,
+        "description": "Oscilador macro baseado em ciclos. Valores acima de 1.4 indicam fim de ciclo.",
+        "unit": ""
+    },
+    "Bitcoin 4-Year Moving Average": {
+        "current": 2.13,
+        "reference": 3.5,
+        "description": "Média móvel de 4 anos. Valores acima de 3.5 indicam possível topo de ciclo.",
+        "unit": ""
+    },
+    "Crypto Bitcoin Bull Run Index": {
+        "current": 74,
+        "reference": 90,
+        "description": "Índice de bull run cripto (CBBI). Valores acima de 90 indicam fim de bull run.",
+        "unit": ""
+    },
+    "Bitcoin Reserve Risk": {
+        "current": 0.0024,
+        "reference": 0.005,
+        "description": "Risco de reserva baseado em HODL waves. Valores acima de 0.005 indicam alto risco.",
+        "unit": ""
+    },
+    "Golden Ratio Multiplier": {
+        "current": 112035.99,
+        "reference": 135522,
+        "description": "Multiplicador da proporção áurea. Valores próximos a $135k indicam resistência forte.",
+        "unit": "$"
+    },
+    "Bitcoin Terminal Price": {
+        "current": 112035.99,
+        "reference": 187702,
+        "description": "Preço terminal baseado em modelos. Valores próximos a $187k indicam topo teórico.",
+        "unit": "$"
+    },
+    "Smithson Bitcoin Price Forecast": {
+        "current": 112035.99,
+        "reference": 175000,
+        "description": "Previsão de preço Smithson. Modelo baseado em análise técnica e fundamentalista.",
+        "unit": "$"
+    },
+    "Bitcoin Long Term Holder Supply": {
+        "current": 15.47,
+        "reference": 13.5,
+        "description": "Suprimento de holders de longo prazo. Valores abaixo de 13.5M indicam distribuição.",
+        "unit": "M"
+    },
+    "Bitcoin Short Term Holder Supply": {
+        "current": 22.31,
+        "reference": 30,
+        "description": "Suprimento de holders de curto prazo (%). Valores acima de 30% indicam especulação.",
+        "unit": "%"
+    },
+    "Bitcoin AHR999x Top Escape": {
+        "current": 3.04,
+        "reference": 0.45,
+        "description": "Indicador de escape do topo AHR999x. Valores abaixo de 0.45 indicam momento de venda.",
+        "unit": ""
+    },
+    "MicroStrategy Avg Bitcoin Cost": {
+        "current": 73526,
+        "reference": 155655,
+        "description": "Custo médio do Bitcoin da MicroStrategy. Referência baseada em compras históricas.",
+        "unit": "$"
+    },
+    "Bitcoin Trend Indicator": {
+        "current": 6.14,
+        "reference": 7,
+        "description": "Indicador de tendência baseado em momentum. Valores acima de 7 indicam possível reversão.",
+        "unit": ""
+    },
+    "3-Month Annualized Ratio": {
+        "current": 9.95,
+        "reference": 30,
+        "description": "Ratio anualizado de 3 meses. Valores acima de 30% indicam crescimento insustentável.",
+        "unit": "%"
+    },
+    "Days of ETF Net Outflows": {
+        "current": 2,
+        "reference": 10,
+        "description": "Dias consecutivos de saídas líquidas de ETFs. Mais de 10 dias pode indicar fim de ciclo.",
+        "unit": " dias"
+    },
+    "ETF-to-BTC Ratio": {
+        "current": 5.2,
+        "reference": 3.5,
+        "description": "Proporção entre ETFs e Bitcoin. Valores acima de 3.5% podem indicar sobrecompra.",
+        "unit": "%"
+    },
+    "USDT Flexible Savings": {
+        "current": 5.66,
+        "reference": 29,
+        "description": "Taxa de poupança flexível USDT. Taxas acima de 29% indicam alta demanda por stablecoins.",
+        "unit": "%"
+    },
+    "RSI - 22 Day": {
+        "current": 47.173,
+        "reference": 80,
+        "description": "Índice de Força Relativa de 22 dias. Valores acima de 80 indicam sobrecompra extrema.",
+        "unit": ""
+    },
+    "CMC Altcoin Season Index": {
+        "current": 54,
+        "reference": 75,
+        "description": "Índice de temporada de altcoins. Valores acima de 75 indicam altseason extrema.",
+        "unit": ""
     }
+}
+
+def calculate_proximity(indicator_name, current, reference):
+    """Calcula proximidade ao fim de ciclo (0-100%)"""
+    if current is None or reference is None or reference == 0:
+        return 0
     
-    # Calcular proximidade e zona de risco para cada indicador
-    processed_indicators = {}
-    in_risk_zone_count = 0
+    # Indicadores onde menor valor = mais próximo do fim de ciclo
+    inverse_indicators = [
+        "Bitcoin Dominance", 
+        "Bitcoin Long Term Holder Supply", 
+        "Bitcoin AHR999x Top Escape"
+    ]
+    
+    if indicator_name in inverse_indicators:
+        # Para estes, quanto menor o valor atual, maior a proximidade
+        proximity = ((reference - current) / reference) * 100
+        proximity = max(0, proximity)  # Não pode ser negativo
+    else:
+        # Para a maioria, quanto maior o valor atual, maior a proximidade
+        proximity = (current / reference) * 100
+    
+    return min(100, max(0, proximity))  # Limitar entre 0-100%
+
+def is_in_risk_zone(indicator_name, current, reference):
+    """Determina se o indicador está na zona de risco"""
+    if current is None or reference is None:
+        return False
+    
+    inverse_indicators = [
+        "Bitcoin Dominance", 
+        "Bitcoin Long Term Holder Supply", 
+        "Bitcoin AHR999x Top Escape"
+    ]
+    
+    if indicator_name in inverse_indicators:
+        return current <= reference
+    else:
+        return current >= reference
+
+def get_risk_level(proximity):
+    """Determina nível de risco baseado na proximidade"""
+    if proximity >= 90:
+        return "CRÍTICO"
+    elif proximity >= 70:
+        return "ALTO"
+    elif proximity >= 50:
+        return "MÉDIO"
+    else:
+        return "BAIXO"
+
+def process_indicators():
+    """Processa todos os indicadores e calcula métricas"""
+    indicators = {}
     total_proximity = 0
+    valid_count = 0
+    in_risk_zone_count = 0
+    risk_distribution = {"BAIXO": 0, "MÉDIO": 0, "ALTO": 0, "CRÍTICO": 0}
     
-    for name, data in indicators.items():
-        current = data['current']
-        reference = data['reference']
-        logic = data['logic']
+    for name, data in SIMULATED_DATA.items():
+        current = data["current"]
+        reference = data["reference"]
         
-        # Calcular proximidade baseada na lógica
-        if logic == 'higher_is_worse':
-            # Quanto maior o valor atual, mais próximo do fim de ciclo
-            if current >= reference:
-                proximity = 100.0  # Atingiu ou ultrapassou a referência
-                in_risk_zone = True
-            else:
-                proximity = (current / reference) * 100
-                in_risk_zone = False
-        else:  # lower_is_worse
-            # Quanto menor o valor atual, mais próximo do fim de ciclo
-            if current <= reference:
-                proximity = 100.0  # Atingiu ou ficou abaixo da referência
-                in_risk_zone = True
-            else:
-                # Calcular proximidade inversa
-                proximity = max(0, 100 - ((current - reference) / reference) * 100)
-                in_risk_zone = False
+        proximity = calculate_proximity(name, current, reference)
+        in_risk = is_in_risk_zone(name, current, reference)
+        risk_level = get_risk_level(proximity)
         
-        # Garantir que proximidade não seja negativa
-        proximity = max(0, min(100, proximity))
-        
-        # Determinar nível de risco
-        if proximity >= 70:
-            risk_level = 'ALTO'
-        elif proximity >= 50:
-            risk_level = 'MÉDIO'
-        else:
-            risk_level = 'BAIXO'
-        
-        # Contar indicadores na zona de risco
-        if in_risk_zone:
-            in_risk_zone_count += 1
+        indicators[name] = {
+            "current": current,
+            "reference": reference,
+            "proximity": round(proximity, 1),
+            "in_risk_zone": in_risk,
+            "risk_level": risk_level,
+            "description": data["description"],
+            "unit": data["unit"]
+        }
         
         total_proximity += proximity
+        valid_count += 1
         
-        processed_indicators[name] = {
-            'current': current,
-            'reference': reference,
-            'unit': data['unit'],
-            'proximity': round(proximity, 1),
-            'risk_level': risk_level,
-            'in_risk_zone': in_risk_zone,
-            'description': data['description'],
-            'logic': logic
-        }
+        if in_risk:
+            in_risk_zone_count += 1
+        
+        risk_distribution[risk_level] += 1
     
-    # Calcular estatísticas gerais
-    avg_proximity = total_proximity / len(indicators)
-    risk_zone_percentage = (in_risk_zone_count / len(indicators)) * 100
+    # Calcular métricas de resumo
+    avg_proximity = total_proximity / valid_count if valid_count > 0 else 0
+    risk_zone_percentage = (in_risk_zone_count / valid_count) * 100 if valid_count > 0 else 0
     
-    # Determinar status geral
-    if avg_proximity >= 70:
-        general_status = "🔴 ALTO RISCO - Possível fim de ciclo"
-    elif avg_proximity >= 50:
-        general_status = "🟠 BAIXO-MÉDIO RISCO - Início/meio do ciclo"
+    # Status geral
+    if avg_proximity >= 80:
+        status = "🔴 ALTO RISCO - Possível fim de ciclo"
+    elif avg_proximity >= 60:
+        status = "🟡 MÉDIO RISCO - Monitorar de perto"
+    elif avg_proximity >= 40:
+        status = "🟠 BAIXO-MÉDIO RISCO - Meio do ciclo"
     else:
-        general_status = "🟢 BAIXO RISCO - Início do ciclo"
+        status = "🟢 BAIXO RISCO - Início do ciclo"
     
-    # Contar por nível de risco
-    risk_counts = {'BAIXO': 0, 'MÉDIO': 0, 'ALTO': 0, 'CRÍTICO': 0}
-    for indicator in processed_indicators.values():
-        if indicator['in_risk_zone']:
-            risk_counts['CRÍTICO'] += 1
-        else:
-            risk_counts[indicator['risk_level']] += 1
-    
-    indicators_cache = {
-        'indicators': processed_indicators,
-        'summary': {
-            'total_indicators': len(indicators),
-            'in_risk_zone': in_risk_zone_count,
-            'avg_proximity': round(avg_proximity, 1),
-            'risk_zone_percentage': round(risk_zone_percentage, 1),
-            'general_status': general_status,
-            'risk_distribution': risk_counts
-        }
+    summary = {
+        "total_indicators": valid_count,
+        "in_risk_zone": in_risk_zone_count,
+        "avg_proximity": round(avg_proximity, 1),
+        "risk_zone_percentage": round(risk_zone_percentage, 1),
+        "general_status": status,
+        "risk_distribution": risk_distribution,
+        "last_update": datetime.now().isoformat()
     }
     
-    last_update = time.strftime('%d/%m/%Y, %H:%M:%S')
-    print(f"Indicadores atualizados: {len(indicators)} indicadores, {in_risk_zone_count} na zona de risco")
-
-def background_updater():
-    """Thread para atualizar dados em background"""
-    while True:
-        try:
-            update_indicators()
-            time.sleep(300)  # Atualizar a cada 5 minutos
-        except Exception as e:
-            print(f"Erro na atualização em background: {e}")
-            time.sleep(60)  # Tentar novamente em 1 minuto
+    return indicators, summary
 
 @app.route('/')
 def home():
     return jsonify({
-        'message': 'API de Indicadores BTC - Scraping Real da CoinMarketCap',
-        'status': 'online',
-        'last_update': last_update,
-        'endpoints': ['/api/summary', '/api/indicators', '/api/update']
-    })
-
-@app.route('/api/summary')
-def get_summary():
-    if not indicators_cache:
-        update_indicators()
-    
-    return jsonify({
-        'summary': indicators_cache.get('summary', {}),
-        'last_update': last_update
+        "message": "🚀 Bitcoin Market Cycle API - Versão de Teste",
+        "status": "online",
+        "version": "TEST-1.0.0",
+        "last_update": datetime.now().isoformat(),
+        "data_source": "Dados Simulados Realistas",
+        "total_indicators": len(SIMULATED_DATA),
+        "note": "Esta é uma versão de teste com dados simulados para validar o frontend"
     })
 
 @app.route('/api/indicators')
 def get_indicators():
-    if not indicators_cache:
-        update_indicators()
+    """Retorna todos os indicadores processados"""
+    indicators, summary = process_indicators()
     
     return jsonify({
-        'indicators': indicators_cache.get('indicators', {}),
-        'last_update': last_update
+        "indicators": indicators,
+        "last_update": datetime.now().isoformat()
+    })
+
+@app.route('/api/summary')
+def get_summary():
+    """Retorna resumo da análise"""
+    indicators, summary = process_indicators()
+    
+    return jsonify({
+        "summary": summary,
+        "last_update": datetime.now().isoformat()
     })
 
 @app.route('/api/update')
 def force_update():
-    update_indicators()
+    """Força atualização imediata dos dados"""
+    indicators, summary = process_indicators()
+    
     return jsonify({
-        'message': 'Indicadores atualizados com sucesso',
-        'last_update': last_update,
-        'total_indicators': len(indicators_cache.get('indicators', {}))
+        "message": "✅ Dados atualizados com sucesso!",
+        "timestamp": datetime.now().isoformat(),
+        "total_indicators": len(indicators),
+        "avg_proximity": summary['avg_proximity'],
+        "in_risk_zone": summary['in_risk_zone'],
+        "risk_zone_percentage": summary['risk_zone_percentage'],
+        "note": "Dados simulados para teste"
+    })
+
+@app.route('/health')
+def health_check():
+    """Verifica status da API"""
+    return jsonify({
+        "status": "healthy",
+        "last_update": datetime.now().isoformat(),
+        "indicators_count": len(SIMULATED_DATA),
+        "version": "TEST-1.0.0",
+        "data_source": "Simulated Data"
     })
 
 if __name__ == '__main__':
-    # Atualizar dados inicialmente
-    update_indicators()
+    print("🚀 Iniciando Bitcoin Market Cycle API - Versão de Teste")
+    print(f"📊 {len(SIMULATED_DATA)} indicadores simulados carregados")
     
-    # Iniciar thread de atualização em background
-    updater_thread = threading.Thread(target=background_updater, daemon=True)
-    updater_thread.start()
+    indicators, summary = process_indicators()
+    print(f"✅ Proximidade média: {summary['avg_proximity']:.1f}%")
+    print(f"🔴 Na zona de risco: {summary['in_risk_zone']}/{summary['total_indicators']}")
     
-    # Iniciar servidor
     app.run(host='0.0.0.0', port=5000, debug=False)
