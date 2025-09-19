@@ -1,3 +1,8 @@
+"""
+API Server Bitcoin Market Cycle - Versão de Teste
+Dados simulados realistas para testar o frontend
+"""
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from datetime import datetime
@@ -172,9 +177,9 @@ SIMULATED_DATA = {
         "unit": " dias"
     },
     "ETF-to-BTC Ratio": {
-        "current": 5.2,
+        "current": 3.2,
         "reference": 3.5,
-        "description": "Proporção entre ETFs e Bitcoin. Valores acima de 3.5% podem indicar sobrecompra.",
+        "description": "Proporção entre ETFs e Bitcoin. Valores abaixo de 3.5% podem indicar fim de ciclo.",
         "unit": "%"
     },
     "USDT Flexible Savings": {
@@ -206,7 +211,8 @@ def calculate_proximity(indicator_name, current, reference):
     inverse_indicators = [
         "Bitcoin Dominance", 
         "Bitcoin Long Term Holder Supply", 
-        "Bitcoin AHR999x Top Escape"
+        "Bitcoin AHR999x Top Escape",
+        "ETF-to-BTC Ratio"  # CORRIGIDO: Adicionado ETF-to-BTC Ratio como indicador inverso
     ]
     
     if indicator_name in inverse_indicators:
@@ -227,7 +233,8 @@ def is_in_risk_zone(indicator_name, current, reference):
     inverse_indicators = [
         "Bitcoin Dominance", 
         "Bitcoin Long Term Holder Supply", 
-        "Bitcoin AHR999x Top Escape"
+        "Bitcoin AHR999x Top Escape",
+        "ETF-to-BTC Ratio"  # CORRIGIDO: Adicionado ETF-to-BTC Ratio como indicador inverso
     ]
     
     if indicator_name in inverse_indicators:
@@ -372,4 +379,4 @@ if __name__ == '__main__':
     print(f"✅ Proximidade média: {summary['avg_proximity']:.1f}%")
     print(f"🔴 Na zona de risco: {summary['in_risk_zone']}/{summary['total_indicators']}")
     
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5002, debug=False)
