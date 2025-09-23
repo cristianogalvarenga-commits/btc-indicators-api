@@ -10,7 +10,7 @@ import threading
 import time
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
 # Dados simulados realistas baseados em valores típicos do mercado
 SIMULATED_DATA = {
@@ -379,5 +379,4 @@ if __name__ == '__main__':
     print(f"✅ Proximidade média: {summary['avg_proximity']:.1f}%")
     print(f"🔴 Na zona de risco: {summary['in_risk_zone']}/{summary['total_indicators']}")
     
-    app.run(host='0.0.0.0', port=5002, debug=False)
-
+    app.run(host='0.0.0.0', port=5000, debug=False)
