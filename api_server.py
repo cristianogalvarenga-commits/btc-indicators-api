@@ -380,3 +380,4 @@ if __name__ == '__main__':
     print(f"🔴 Na zona de risco: {summary['in_risk_zone']}/{summary['total_indicators']}")
     
     app.run(host='0.0.0.0', port=5002, debug=False)
+
