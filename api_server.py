@@ -177,10 +177,10 @@ SIMULATED_DATA = {
         "unit": " dias"
     },
     "ETF-to-BTC Ratio": {
-        "current": 3.2,
+        "current": 3.8,  # Valor acima da referência para não estar na zona de risco
         "reference": 3.5,
-        "description": "Proporção entre ETFs e Bitcoin. Valores abaixo de 3.5% podem indicar fim de ciclo.",
-        "unit": "%"
+        "description": "Relação entre ETFs de Bitcoin e Bitcoin. Valores baixos indicam possível fim de ciclo.",
+        "unit": ""
     },
     "USDT Flexible Savings": {
         "current": 5.66,
