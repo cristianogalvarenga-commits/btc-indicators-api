@@ -6,7 +6,6 @@ Dados simulados realistas para testar o frontend
 from flask import Flask, jsonify
 from flask_cors import CORS
 from datetime import datetime
-import pytz
 import threading
 import time
 
@@ -178,10 +177,10 @@ SIMULATED_DATA = {
         "unit": " dias"
     },
     "ETF-to-BTC Ratio": {
-        "current": 3.2,
+        "current": 3.8,  # Valor acima da referência para não estar na zona de risco
         "reference": 3.5,
-        "description": "Proporção entre ETFs e Bitcoin. Valores abaixo de 3.5% podem indicar fim de ciclo.",
-        "unit": "%"
+        "description": "Relação entre ETFs de Bitcoin e Bitcoin. Valores baixos indicam possível fim de ciclo.",
+        "unit": ""
     },
     "USDT Flexible Savings": {
         "current": 5.66,
@@ -208,20 +207,23 @@ def calculate_proximity(indicator_name, current, reference):
     if current is None or reference is None or reference == 0:
         return 0
     
+    # Indicadores onde menor valor = mais próximo do fim de ciclo
     inverse_indicators = [
         "Bitcoin Dominance", 
         "Bitcoin Long Term Holder Supply", 
         "Bitcoin AHR999x Top Escape",
-        "ETF-to-BTC Ratio"
+        "ETF-to-BTC Ratio"  # CORRIGIDO: Adicionado ETF-to-BTC Ratio como indicador inverso
     ]
     
     if indicator_name in inverse_indicators:
+        # Para estes, quanto menor o valor atual, maior a proximidade
         proximity = ((reference - current) / reference) * 100
-        proximity = max(0, proximity)
+        proximity = max(0, proximity)  # Não pode ser negativo
     else:
+        # Para a maioria, quanto maior o valor atual, maior a proximidade
         proximity = (current / reference) * 100
     
-    return min(100, max(0, proximity))
+    return min(100, max(0, proximity))  # Limitar entre 0-100%
 
 def is_in_risk_zone(indicator_name, current, reference):
     """Determina se o indicador está na zona de risco"""
@@ -232,7 +234,7 @@ def is_in_risk_zone(indicator_name, current, reference):
         "Bitcoin Dominance", 
         "Bitcoin Long Term Holder Supply", 
         "Bitcoin AHR999x Top Escape",
-        "ETF-to-BTC Ratio"
+        "ETF-to-BTC Ratio"  # CORRIGIDO: Adicionado ETF-to-BTC Ratio como indicador inverso
     ]
     
     if indicator_name in inverse_indicators:
@@ -285,9 +287,11 @@ def process_indicators():
         
         risk_distribution[risk_level] += 1
     
+    # Calcular métricas de resumo
     avg_proximity = total_proximity / valid_count if valid_count > 0 else 0
     risk_zone_percentage = (in_risk_zone_count / valid_count) * 100 if valid_count > 0 else 0
     
+    # Status geral
     if avg_proximity >= 80:
         status = "🔴 ALTO RISCO - Possível fim de ciclo"
     elif avg_proximity >= 60:
@@ -304,7 +308,7 @@ def process_indicators():
         "risk_zone_percentage": round(risk_zone_percentage, 1),
         "general_status": status,
         "risk_distribution": risk_distribution,
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
+        "last_update": datetime.now().isoformat()
     }
     
     return indicators, summary
@@ -315,7 +319,7 @@ def home():
         "message": "🚀 Bitcoin Market Cycle API - Versão de Teste",
         "status": "online",
         "version": "TEST-1.0.0",
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
+        "last_update": datetime.now().isoformat(),
         "data_source": "Dados Simulados Realistas",
         "total_indicators": len(SIMULATED_DATA),
         "note": "Esta é uma versão de teste com dados simulados para validar o frontend"
@@ -323,26 +327,32 @@ def home():
 
 @app.route('/api/indicators')
 def get_indicators():
+    """Retorna todos os indicadores processados"""
     indicators, summary = process_indicators()
+    
     return jsonify({
         "indicators": indicators,
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
+        "last_update": datetime.now().isoformat()
     })
 
 @app.route('/api/summary')
 def get_summary():
+    """Retorna resumo da análise"""
     indicators, summary = process_indicators()
+    
     return jsonify({
         "summary": summary,
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
+        "last_update": datetime.now().isoformat()
     })
 
 @app.route('/api/update')
 def force_update():
+    """Força atualização imediata dos dados"""
     indicators, summary = process_indicators()
+    
     return jsonify({
         "message": "✅ Dados atualizados com sucesso!",
-        "timestamp": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "total_indicators": len(indicators),
         "avg_proximity": summary['avg_proximity'],
         "in_risk_zone": summary['in_risk_zone'],
@@ -352,9 +362,10 @@ def force_update():
 
 @app.route('/health')
 def health_check():
+    """Verifica status da API"""
     return jsonify({
         "status": "healthy",
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
+        "last_update": datetime.now().isoformat(),
         "indicators_count": len(SIMULATED_DATA),
         "version": "TEST-1.0.0",
         "data_source": "Simulated Data"
