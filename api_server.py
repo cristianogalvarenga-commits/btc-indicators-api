@@ -6,12 +6,15 @@ Dados simulados realistas para testar o frontend
 from flask import Flask, jsonify
 from flask_cors import CORS
 from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo  # ✅ substitui pytz
 import threading
 import time
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Fuso horário de São Paulo
+SP_TZ = ZoneInfo("America/Sao_Paulo")
 
 # Dados simulados realistas baseados em valores típicos do mercado
 SIMULATED_DATA = {
@@ -49,99 +52,56 @@ SIMULATED_DATA = {
 }
 
 def calculate_proximity(indicator_name, current, reference):
-    """Calcula proximidade ao fim de ciclo (0-100%)"""
     if current is None or reference is None or reference == 0:
         return 0
-    
     inverse_indicators = ["Bitcoin Dominance", "Bitcoin Long Term Holder Supply", "Bitcoin AHR999x Top Escape", "ETF-to-BTC Ratio"]
-    
     if indicator_name in inverse_indicators:
         proximity = ((reference - current) / reference) * 100
         proximity = max(0, proximity)
     else:
         proximity = (current / reference) * 100
-    
     return min(100, max(0, proximity))
 
 def is_in_risk_zone(indicator_name, current, reference):
-    """Determina se o indicador está na zona de risco"""
     if current is None or reference is None:
         return False
-    
     inverse_indicators = ["Bitcoin Dominance", "Bitcoin Long Term Holder Supply", "Bitcoin AHR999x Top Escape", "ETF-to-BTC Ratio"]
-    
-    if indicator_name in inverse_indicators:
-        return current <= reference
-    else:
-        return current >= reference
+    return current <= reference if indicator_name in inverse_indicators else current >= reference
 
 def get_risk_level(proximity):
-    """Determina nível de risco baseado na proximidade"""
-    if proximity >= 90:
-        return "CRÍTICO"
-    elif proximity >= 70:
-        return "ALTO"
-    elif proximity >= 50:
-        return "MÉDIO"
-    else:
-        return "BAIXO"
+    if proximity >= 90: return "CRÍTICO"
+    if proximity >= 70: return "ALTO"
+    if proximity >= 50: return "MÉDIO"
+    return "BAIXO"
 
 def process_indicators():
-    """Processa todos os indicadores e calcula métricas"""
-    indicators = {}
-    total_proximity = 0
-    valid_count = 0
-    in_risk_zone_count = 0
+    indicators, total_proximity, valid_count, in_risk_zone_count = {}, 0, 0, 0
     risk_distribution = {"BAIXO": 0, "MÉDIO": 0, "ALTO": 0, "CRÍTICO": 0}
-    
     for name, data in SIMULATED_DATA.items():
-        current = data["current"]
-        reference = data["reference"]
-        
+        current, reference = data["current"], data["reference"]
         proximity = calculate_proximity(name, current, reference)
         in_risk = is_in_risk_zone(name, current, reference)
         risk_level = get_risk_level(proximity)
-        
         indicators[name] = {
-            "current": current,
-            "reference": reference,
-            "proximity": round(proximity, 1),
-            "in_risk_zone": in_risk,
-            "risk_level": risk_level,
-            "description": data["description"],
-            "unit": data["unit"]
+            "current": current, "reference": reference, "proximity": round(proximity, 1),
+            "in_risk_zone": in_risk, "risk_level": risk_level, "description": data["description"], "unit": data["unit"]
         }
-        
         total_proximity += proximity
         valid_count += 1
-        
-        if in_risk:
-            in_risk_zone_count += 1
-        
+        if in_risk: in_risk_zone_count += 1
         risk_distribution[risk_level] += 1
-    
     avg_proximity = total_proximity / valid_count if valid_count > 0 else 0
     risk_zone_percentage = (in_risk_zone_count / valid_count) * 100 if valid_count > 0 else 0
-    
-    if avg_proximity >= 80:
-        status = "🔴 ALTO RISCO - Possível fim de ciclo"
-    elif avg_proximity >= 60:
-        status = "🟡 MÉDIO RISCO - Monitorar de perto"
-    elif avg_proximity >= 40:
-        status = "🟠 BAIXO-MÉDIO RISCO - Meio do ciclo"
-    else:
-        status = "🟢 BAIXO RISCO - Início do ciclo"
-    
+    if avg_proximity >= 80: status = "🔴 ALTO RISCO - Possível fim de ciclo"
+    elif avg_proximity >= 60: status = "🟡 MÉDIO RISCO - Monitorar de perto"
+    elif avg_proximity >= 40: status = "🟠 BAIXO-MÉDIO RISCO - Meio do ciclo"
+    else: status = "🟢 BAIXO RISCO - Início do ciclo"
     summary = {
-        "total_indicators": valid_count,
-        "in_risk_zone": in_risk_zone_count,
-        "avg_proximity": round(avg_proximity, 1),
-        "risk_zone_percentage": round(risk_zone_percentage, 1),
-        "general_status": status,
-        "risk_distribution": risk_distribution,
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
+        "total_indicators": valid_count, "in_risk_zone": in_risk_zone_count,
+        "avg_proximity": round(avg_proximity, 1), "risk_zone_percentage": round(risk_zone_percentage, 1),
+        "general_status": status, "risk_distribution": risk_distribution,
+        "last_update": datetime.now(SP_TZ).isoformat()
     }
-    
     return indicators, summary
 
 @app.route('/')
@@ -150,7 +110,7 @@ def home():
         "message": "🚀 Bitcoin Market Cycle API - Versão de Teste",
         "status": "online",
         "version": "TEST-1.0.0",
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
+        "last_update": datetime.now(SP_TZ).isoformat(),
         "data_source": "Dados Simulados Realistas",
         "total_indicators": len(SIMULATED_DATA),
         "note": "Esta é uma versão de teste com dados simulados para validar o frontend"
@@ -158,18 +118,18 @@ def home():
 
 @app.route('/api/indicators')
 def get_indicators():
-    indicators, summary = process_indicators()
+    indicators, _ = process_indicators()
     return jsonify({
         "indicators": indicators,
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
+        "last_update": datetime.now(SP_TZ).isoformat()
     })
 
 @app.route('/api/summary')
 def get_summary():
-    indicators, summary = process_indicators()
+    _, summary = process_indicators()
     return jsonify({
         "summary": summary,
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
+        "last_update": datetime.now(SP_TZ).isoformat()
     })
 
 @app.route('/api/update')
@@ -177,7 +137,7 @@ def force_update():
     indicators, summary = process_indicators()
     return jsonify({
         "message": "✅ Dados atualizados com sucesso!",
-        "timestamp": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
+        "timestamp": datetime.now(SP_TZ).isoformat(),
         "total_indicators": len(indicators),
         "avg_proximity": summary['avg_proximity'],
         "in_risk_zone": summary['in_risk_zone'],
@@ -189,7 +149,7 @@ def force_update():
 def health_check():
     return jsonify({
         "status": "healthy",
-        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
+        "last_update": datetime.now(SP_TZ).isoformat(),
         "indicators_count": len(SIMULATED_DATA),
         "version": "TEST-1.0.0",
         "data_source": "Simulated Data"
@@ -198,9 +158,7 @@ def health_check():
 if __name__ == '__main__':
     print("🚀 Iniciando Bitcoin Market Cycle API - Versão de Teste")
     print(f"📊 {len(SIMULATED_DATA)} indicadores simulados carregados")
-    
     indicators, summary = process_indicators()
     print(f"✅ Proximidade média: {summary['avg_proximity']:.1f}%")
     print(f"🔴 Na zona de risco: {summary['in_risk_zone']}/{summary['total_indicators']}")
-    
     app.run(host='0.0.0.0', port=5002, debug=False)
