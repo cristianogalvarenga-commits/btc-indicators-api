@@ -6,6 +6,7 @@ Dados simulados realistas para testar o frontend
 from flask import Flask, jsonify
 from flask_cors import CORS
 from datetime import datetime
+import pytz
 import threading
 import time
 
@@ -308,7 +309,7 @@ def process_indicators():
         "risk_zone_percentage": round(risk_zone_percentage, 1),
         "general_status": status,
         "risk_distribution": risk_distribution,
-        "last_update": datetime.now().isoformat()
+        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
     }
     
     return indicators, summary
@@ -319,7 +320,7 @@ def home():
         "message": "🚀 Bitcoin Market Cycle API - Versão de Teste",
         "status": "online",
         "version": "TEST-1.0.0",
-        "last_update": datetime.now().isoformat(),
+        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
         "data_source": "Dados Simulados Realistas",
         "total_indicators": len(SIMULATED_DATA),
         "note": "Esta é uma versão de teste com dados simulados para validar o frontend"
@@ -332,7 +333,7 @@ def get_indicators():
     
     return jsonify({
         "indicators": indicators,
-        "last_update": datetime.now().isoformat()
+        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
     })
 
 @app.route('/api/summary')
@@ -342,7 +343,7 @@ def get_summary():
     
     return jsonify({
         "summary": summary,
-        "last_update": datetime.now().isoformat()
+        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat()
     })
 
 @app.route('/api/update')
@@ -365,7 +366,7 @@ def health_check():
     """Verifica status da API"""
     return jsonify({
         "status": "healthy",
-        "last_update": datetime.now().isoformat(),
+        "last_update": datetime.now(pytz.timezone("America/Sao_Paulo")).isoformat(),
         "indicators_count": len(SIMULATED_DATA),
         "version": "TEST-1.0.0",
         "data_source": "Simulated Data"
@@ -380,3 +381,4 @@ if __name__ == '__main__':
     print(f"🔴 Na zona de risco: {summary['in_risk_zone']}/{summary['total_indicators']}")
     
     app.run(host='0.0.0.0', port=5002, debug=False)
+
